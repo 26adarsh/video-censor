@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Censor</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f4f9; color: #333; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background: #fff; padding: 40px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); text-align: center; max-width: 600px; width: 90%; }
+        h1 { color: #5a4bcf; }
+        input[type="file"] { border: 2px dashed #ddd; padding: 20px; border-radius: 5px; cursor: pointer; display: block; width: calc(100% - 44px); margin: 20px 0; }
+        input[type="file"]::-webkit-file-upload-button { background: #5a4bcf; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        button { background: #5a4bcf; color: white; padding: 12px 25px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; transition: background-color 0.3s; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #status { margin-top: 20px; font-size: 18px; color: #666; min-height: 25px; }
+        #video-player-container { margin-top: 20px; display: none; }
+        video { max-width: 100%; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Upload Video to Censor</h1>
+        <p>This tool will detect and beep out abusive words from the audio of your video.</p>
+
+        <form id="upload-form">
+            <input type="file" id="video-file" name="file" accept="video/*" required>
+            <button type="submit">Process Video</button>
+        </form>
+
+        <div id="status"></div>
+
+        <div id="video-player-container">
+            <h2>Processed Video</h2>
+            <video id="processed-video" controls></video>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('upload-form');
+        const statusDiv = document.getElementById('status');
+        const videoPlayerContainer = document.getElementById('video-player-container');
+        const videoPlayer = document.getElementById('processed-video');
+        const submitButton = form.querySelector('button');
+        const fileInput = document.getElementById('video-file');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!fileInput.files || fileInput.files.length === 0) {
+                statusDiv.textContent = 'Please select a video file first.';
+                return;
+            }
+
+            // Disable button and show processing status
+            submitButton.disabled = true;
+            statusDiv.textContent = 'Uploading and processing... This may take a few minutes.';
+            videoPlayerContainer.style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            try {
+                const response = await fetch('/process-video/', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'An unknown error occurred.');
+                }
+
+                const data = await response.json();
+
+                // Set the video source and show the player
+                videoPlayer.src = data.processed_video_url;
+                videoPlayerContainer.style.display = 'block';
+                statusDiv.textContent = 'Processing complete!';
+
+            } catch (error) {
+                statusDiv.textContent = `Error: ${error.message}`;
+                console.error('Error:', error);
+            } finally {
+                // Re-enable the button
+                submitButton.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
