@@ -1,6 +1,7 @@
 import os
 import uuid
 import shutil
+import re
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -9,113 +10,103 @@ from pydub import AudioSegment
 from pydub.generators import Sine
 from faster_whisper import WhisperModel
 
-# --- 1. INITIAL SETUP ---
-
-# Initialize the FastAPI app
+# --- Setup ---
 app = FastAPI()
 
-# Setup for templates
 templates = Jinja2Templates(directory="templates")
 
-# Create directories for temporary files
 UPLOADS_DIR = "uploads"
 PROCESSED_DIR = "processed"
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 os.makedirs(PROCESSED_DIR, exist_ok=True)
 
-# Mount the 'processed' directory to serve the final videos
-app.mount("/processed_videos", StaticFiles(directory=PROCESSED_DIR), name="processed_videos")
+app.mount("/processed", StaticFiles(directory=PROCESSED_DIR), name="processed")
 
-# Load the abusive words list from the text file
+# Load abusive words
+ABUSIVE_WORDS = set()
 try:
-    with open("abusive_words.txt", "r") as f:
-        ABUSIVE_WORDS = {line.strip().lower() for line in f}
+    with open("abusive_words.txt", "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip().lower()
+            if not line:
+                continue
+            if "|" in line:
+                ABUSIVE_WORDS.update(line.split("|"))
+            else:
+                ABUSIVE_WORDS.add(line)
+    print(f"✅ Loaded {len(ABUSIVE_WORDS)} abusive words")
 except FileNotFoundError:
-    print("Warning: 'abusive_words.txt' not found. No words will be censored.")
-    ABUSIVE_WORDS = set()
-
-# Load the Whisper model
-MODEL_SIZE = "base"
-print(f"Loading Whisper model: {MODEL_SIZE}...")
-model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
-print("Whisper model loaded.")
+    print("⚠️ abusive_words.txt not found. No censoring will happen.")
 
 
-# --- 2. CORE LOGIC ---
+# Normalize words before checking
+def normalize_word(word: str) -> str:
+    return re.sub(r"[^a-z]", "", word.lower())  # remove punctuation & lowercase
 
+
+# Load Whisper
+print("Loading Whisper model...")
+model = WhisperModel("base", device="cpu", compute_type="int8")
+print("Whisper loaded ✅")
+
+
+# --- Core function ---
 def censor_audio_with_beep(original_audio_path: str, abusive_words_timestamps: list):
-    """Overlays a beep sound over the detected abusive words."""
     audio = AudioSegment.from_file(original_audio_path)
 
     for word_info in abusive_words_timestamps:
-        start_time_ms = int(word_info['start'] * 1000)
-        end_time_ms = int(word_info['end'] * 1000)
-        duration = end_time_ms - start_time_ms
+        start_time_ms = int(word_info["start"] * 1000)
+        end_time_ms = int(word_info["end"] * 1000)
+        duration = max(200, end_time_ms - start_time_ms)  # at least 200ms
 
-        beep = Sine(1000).to_audio_segment(duration=duration, volume=-10)
-        audio = audio.overlay(beep, position=start_time_ms)
+        beep = Sine(1000).to_audio_segment(duration=duration, volume=-5)
+        # Replace segment with beep instead of overlay
+        audio = audio[:start_time_ms] + beep + audio[end_time_ms:]
 
     return audio
 
 
-# --- 3. API ENDPOINTS ---
-
+# --- Routes ---
 @app.get("/", response_class=HTMLResponse)
-async def main(request: Request):
-    """Serves the main HTML page."""
+async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-@app.post("/process-video/")
-async def process_video(file: UploadFile = File(...)):
-    """The main endpoint to upload, process, and return a censored video."""
+
+@app.post("/process-audio/")
+async def process_audio(file: UploadFile = File(...)):
     unique_id = str(uuid.uuid4())
-    video_extension = os.path.splitext(file.filename)[1]
-    video_path = os.path.join(UPLOADS_DIR, f"{unique_id}{video_extension}")
-    audio_path = os.path.join(UPLOADS_DIR, f"{unique_id}.wav")
-    censored_audio_path = os.path.join(UPLOADS_DIR, f"{unique_id}_censored.wav")
-    output_video_path = os.path.join(PROCESSED_DIR, f"{unique_id}_censored.mp4")
+    input_path = os.path.join(UPLOADS_DIR, f"{unique_id}_{file.filename}")
+    output_path = os.path.join(PROCESSED_DIR, f"{unique_id}_censored.wav")
 
     try:
-        # 1. Save uploaded video
-        with open(video_path, "wb") as buffer:
+        # Save uploaded file
+        with open(input_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # 2. Extract audio
-        print(f"Extracting audio from {video_path}...")
-        os.system(f'ffmpeg -i "{video_path}" -vn -ar 16000 -ac 1 -y "{audio_path}"')
-
-        # 3. Transcribe and find words to censor
-        print("Transcribing audio...")
-        segments, _ = model.transcribe(audio_path, word_timestamps=True)
+        # Transcribe with Whisper
+        segments, _ = model.transcribe(input_path, word_timestamps=True)
 
         words_to_censor = []
         for segment in segments:
             for word in segment.words:
-                if word.word.strip().lower() in ABUSIVE_WORDS:
-                    print(f"Found word: '{word.word}' at {word.start:.2f}s")
-                    words_to_censor.append({'word': word.word, 'start': word.start, 'end': word.end})
+                cleaned = normalize_word(word.word)
+                if cleaned in ABUSIVE_WORDS:
+                    print(f"🚨 Found abusive word: {word.word} -> {cleaned} at {word.start:.2f}s")
+                    words_to_censor.append(
+                        {"word": cleaned, "start": word.start, "end": word.end}
+                    )
 
-        # 4. Process and merge if necessary
+        # Apply censoring
         if words_to_censor:
-            print("Censoring audio...")
-            censored_audio = censor_audio_with_beep(audio_path, words_to_censor)
-            censored_audio.export(censored_audio_path, format="wav")
-
-            print("Merging censored audio back into video...")
-            os.system(f'ffmpeg -i "{video_path}" -i "{censored_audio_path}" -c:v copy -map 0:v:0 -map 1:a:0 -y "{output_video_path}"')
+            censored_audio = censor_audio_with_beep(input_path, words_to_censor)
+            censored_audio.export(output_path, format="wav")
         else:
-            print("No abusive words found. Using original video.")
-            shutil.copy(video_path, output_video_path)
+            shutil.copy(input_path, output_path)
 
-        # 5. Return the URL to the processed video
-        video_url = f"/processed_videos/{os.path.basename(output_video_path)}"
-        return {"processed_video_url": video_url}
+        return {"processed_url": f"/processed/{os.path.basename(output_path)}"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        # 6. Clean up temporary files
-        print("Cleaning up temporary files...")
-        for path in [video_path, audio_path, censored_audio_path]:
-            if os.path.exists(path):
-                os.remove(path)
+        if os.path.exists(input_path):
+            os.remove(input_path)

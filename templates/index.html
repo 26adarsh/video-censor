@@ -3,87 +3,256 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Censor</title>
+    <title>Audio Censor AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f4f9; color: #333; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { background: #fff; padding: 40px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); text-align: center; max-width: 600px; width: 90%; }
-        h1 { color: #5a4bcf; }
-        input[type="file"] { border: 2px dashed #ddd; padding: 20px; border-radius: 5px; cursor: pointer; display: block; width: calc(100% - 44px); margin: 20px 0; }
-        input[type="file"]::-webkit-file-upload-button { background: #5a4bcf; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
-        button { background: #5a4bcf; color: white; padding: 12px 25px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; transition: background-color 0.3s; }
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
-        #status { margin-top: 20px; font-size: 18px; color: #666; min-height: 25px; }
-        #video-player-container { margin-top: 20px; display: none; }
-        video { max-width: 100%; border-radius: 5px; }
+        :root {
+            --primary-color: #8A2BE2;
+            --secondary-color: #4D4DFF;
+            --background-color: #12121c;
+            --surface-color: #1e1e2f;
+            --text-color: #e0e0e0;
+            --text-muted-color: #a0a0a0;
+            --success-color: #00e676;
+            --error-color: #ff5252;
+            --border-color: #33334a;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow-x: hidden;
+            background-image: radial-gradient(circle at 1% 1%, var(--surface-color) 0.5px, transparent 0);
+            background-size: 30px 30px;
+        }
+
+        .header { text-align: center; padding: 40px 20px; }
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: -webkit-linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header p { font-size: 1.1rem; color: var(--text-muted-color); margin-top: 10px; }
+
+        .main-content {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 20px;
+            gap: 40px;
+        }
+
+        .card {
+            background: var(--surface-color);
+            padding: 30px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 500px;
+        }
+
+        #upload-card { text-align: center; }
+        #upload-label {
+            display: block;
+            border: 3px dashed var(--border-color);
+            padding: 40px;
+            cursor: pointer;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        #upload-label:hover {
+            border-color: var(--primary-color);
+            background-color: rgba(138, 43, 226, 0.1);
+        }
+        #upload-label strong { font-size: 1.2rem; color: var(--text-color); }
+        #media-file { display: none; }
+
+        #file-info { margin-top: 20px; font-size: 0.9rem; color: var(--text-muted-color); min-height: 20px; }
+
+        button {
+            background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            margin-top: 20px;
+        }
+        button:disabled { background: #555; cursor: not-allowed; opacity: 0.7; }
+
+        #results-card { display: none; text-align: center; }
+        #status { font-size: 1.1rem; font-weight: 600; min-height: 50px; display: flex; justify-content: center; align-items: center; gap: 10px; }
+
+        .loader {
+            width: 24px; height: 24px;
+            border: 3px solid var(--primary-color);
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            animation: rotation 1s linear infinite;
+        }
+        @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        #media-player-container { margin-top: 20px; }
+        video, audio { max-width: 100%; border-radius: 8px; border: 1px solid var(--border-color); }
+
+        .action-buttons { display: flex; gap: 15px; margin-top: 20px; }
+
+        .footer { text-align: center; padding: 20px; color: var(--text-muted-color); font-size: 0.9rem; }
+
+        @media (max-width: 768px) {
+            .header h1 { font-size: 2rem; }
+            .main-content { flex-direction: column; align-items: center; }
+            .card { padding: 20px; }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Upload Video to Censor</h1>
-        <p>This tool will detect and beep out abusive words from the audio of your video.</p>
+    <header class="header">
+        <h1>Audio Censor AI 🤖</h1>
+        <p>Upload your video or audio, and we'll automatically detect and beep out foul language.</p>
+    </header>
 
-        <form id="upload-form">
-            <input type="file" id="video-file" name="file" accept="video/*" required>
-            <button type="submit">Process Video</button>
-        </form>
-
-        <div id="status"></div>
-
-        <div id="video-player-container">
-            <h2>Processed Video</h2>
-            <video id="processed-video" controls></video>
+    <main class="main-content">
+        <div class="card" id="upload-card">
+            <form id="upload-form">
+                <input type="file" id="media-file" name="file" accept="video/*,audio/*,.mp3,.wav,.m4a" required>
+                <label for="media-file" id="upload-label">
+                    <p><strong>⬆️ Click to Select a File</strong></p>
+                </label>
+                <div id="file-info">No file selected</div>
+                <button type="submit" id="submit-button" disabled>Process File</button>
+            </form>
         </div>
-    </div>
+
+        <div class="card" id="results-card">
+            <div id="status"></div>
+            <div id="media-player-container">
+                <video id="processed-video" controls style="display:none;"></video>
+                <audio id="processed-audio" controls style="display:none;"></audio>
+            </div>
+            <div class="action-buttons">
+                <a id="download-btn" href="#" download style="display:none; text-decoration: none; width: 100%;">
+                    <button style="width: 100%;">Download Result</button>
+                </a>
+                <button id="reset-btn" style="display:none;">Process Another</button>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2025 - Censor AI</p>
+    </footer>
 
     <script>
         const form = document.getElementById('upload-form');
+        const fileInput = document.getElementById('media-file');
+        const fileInfo = document.getElementById('file-info');
+        const submitButton = document.getElementById('submit-button');
+
+        const uploadCard = document.getElementById('upload-card');
+        const resultsCard = document.getElementById('results-card');
         const statusDiv = document.getElementById('status');
-        const videoPlayerContainer = document.getElementById('video-player-container');
+
         const videoPlayer = document.getElementById('processed-video');
-        const submitButton = form.querySelector('button');
-        const fileInput = document.getElementById('video-file');
+        const audioPlayer = document.getElementById('processed-audio');
+
+        const downloadBtn = document.getElementById('download-btn');
+        const resetBtn = document.getElementById('reset-btn');
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length === 0) {
+                fileInfo.textContent = 'No file selected';
+                submitButton.disabled = true;
+            } else {
+                const file = e.target.files[0];
+                fileInfo.textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+                submitButton.disabled = false;
+            }
+        });
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (!fileInput.files.length) return;
 
-            if (!fileInput.files || fileInput.files.length === 0) {
-                statusDiv.textContent = 'Please select a video file first.';
-                return;
-            }
-
-            // Disable button and show processing status
-            submitButton.disabled = true;
-            statusDiv.textContent = 'Uploading and processing... This may take a few minutes.';
-            videoPlayerContainer.style.display = 'none';
+            uploadCard.style.display = 'none';
+            resultsCard.style.display = 'block';
+            statusDiv.innerHTML = `<div class="loader"></div> Processing your file...`;
 
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
 
             try {
-                const response = await fetch('/process-video/', {
+                const response = await fetch('/process-audio/', {  // ✅ FIXED endpoint
                     method: 'POST',
                     body: formData,
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || 'An unknown error occurred.');
+                    const errorData = await response.json().catch(() => ({ detail: 'Server error' }));
+                    throw new Error(errorData.detail || 'Unknown error');
                 }
 
                 const data = await response.json();
-
-                // Set the video source and show the player
-                videoPlayer.src = data.processed_video_url;
-                videoPlayerContainer.style.display = 'block';
-                statusDiv.textContent = 'Processing complete!';
+                showResult(data.processed_url);  // ✅ FIXED response key
 
             } catch (error) {
-                statusDiv.textContent = `Error: ${error.message}`;
-                console.error('Error:', error);
-            } finally {
-                // Re-enable the button
-                submitButton.disabled = false;
+                statusDiv.innerHTML = `❌ Error: ${error.message}`;
+                statusDiv.style.color = 'var(--error-color)';
+                resetBtn.style.display = 'block';
             }
+        });
+
+        function showResult(processedUrl) {
+            statusDiv.innerHTML = `✅ Processing Complete!`;
+            statusDiv.style.color = 'var(--success-color)';
+
+            const isVideo = fileInput.files[0].type.startsWith('video/');
+            if (isVideo) {
+                videoPlayer.src = processedUrl;
+                videoPlayer.style.display = 'block';
+                audioPlayer.style.display = 'none';
+            } else {
+                audioPlayer.src = processedUrl;
+                audioPlayer.style.display = 'block';
+                videoPlayer.style.display = 'none';
+            }
+
+            downloadBtn.href = processedUrl;
+            downloadBtn.setAttribute('download', 'processed_' + fileInput.files[0].name);
+            downloadBtn.style.display = 'block';
+            resetBtn.style.display = 'block';
+        }
+
+        resetBtn.addEventListener('click', () => {
+            form.reset();
+            fileInfo.textContent = 'No file selected';
+            submitButton.disabled = true;
+
+            resultsCard.style.display = 'none';
+            uploadCard.style.display = 'block';
+
+            videoPlayer.style.display = 'none';
+            audioPlayer.style.display = 'none';
+            videoPlayer.src = '';
+            audioPlayer.src = '';
+
+            downloadBtn.style.display = 'none';
+            resetBtn.style.display = 'none';
+            statusDiv.style.color = 'var(--text-color)';
         });
     </script>
 </body>
