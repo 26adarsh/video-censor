@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Censor AI</title>
+    <title>Media Censor AI</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -122,7 +122,7 @@
 </head>
 <body>
     <header class="header">
-        <h1>Audio Censor AI 🤖</h1>
+        <h1>Media Censor AI 🤖</h1>
         <p>Upload your video or audio, and we'll automatically detect and beep out foul language.</p>
     </header>
 
@@ -196,7 +196,7 @@
             formData.append('file', fileInput.files[0]);
 
             try {
-                const response = await fetch('/process-audio/', {  // ✅ FIXED endpoint
+                const response = await fetch('/process-file/', {   // ✅ Updated endpoint
                     method: 'POST',
                     body: formData,
                 });
@@ -207,7 +207,7 @@
                 }
 
                 const data = await response.json();
-                showResult(data.processed_url);  // ✅ FIXED response key
+                showResult(data.processed_url);
 
             } catch (error) {
                 statusDiv.innerHTML = `❌ Error: ${error.message}`;
